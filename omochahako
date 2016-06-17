@@ -1,1 +1,20 @@
 #!/usr/bin/env python3
+
+import os
+import socket
+
+import unshare
+
+r = unshare.unshare(unshare.CLONE_NEWCGROUP
+                    | unshare.CLONE_NEWIPC
+                    | unshare.CLONE_NEWNET
+                    | unshare.CLONE_NEWNS
+                    | unshare.CLONE_NEWPID
+                    | unshare.CLONE_NEWUSER
+                    | unshare.CLONE_NEWUTS)
+
+if r < 0:
+    print('unshare failed (exit code {})'.format(r))
+else:
+    socket.sethostname('omochahako')  # add a new hostname
+    os.system('bash')
