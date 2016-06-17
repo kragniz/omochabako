@@ -43,8 +43,13 @@ def unshare(flags: int) -> int:
 
 if __name__ == '__main__':
     import os
-    r = unshare(CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWUSER | CLONE_NEWNS)
+    import socket
+
+    r = unshare(CLONE_NEWPID | CLONE_NEWNET |  CLONE_NEWNS |
+                CLONE_NEWUTS | CLONE_NEWCGROUP | CLONE_NEWIPC | 
+                CLONE_NEWUSER)
     if r < 0:
         print('unshare failed (exit code {})'.format(r))
     else:
+        socket.sethostname('omochahako')  # add a new hostname
         os.system('bash')
