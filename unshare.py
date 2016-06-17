@@ -33,4 +33,7 @@ CLONE_IO               = 0x80000000  # Clone io context
 
 
 def unshare(flags: int) -> int:
+    '''
+    Run the unshare syscall with some flags.
+    '''
     return libc.syscall(sys_unshare, flags)
