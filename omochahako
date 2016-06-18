@@ -34,6 +34,22 @@ CLONE_NEWNET         = 0x40000000  # New network namespace
 CLONE_IO             = 0x80000000  # Clone io context
 
 
+# pulled from linux/fs.h
+MS_RDONLY      = 1     # Mount read-only
+MS_NOSUID      = 2     # Ignore suid and sgid bits
+MS_NODEV       = 4     # Disallow access to device special files
+MS_NOEXEC      = 8     # Disallow program execution
+MS_SYNCHRONOUS = 16    # Writes are synced at once
+MS_REMOUNT     = 32    # Alter flags of a mounted FS
+MS_MANDLOCK    = 64    # Allow mandatory locks on an FS
+MS_DIRSYNC     = 128   # Directory modifications are synchronous
+MS_NOATIME     = 1024  # Do not update access times.
+MS_NODIRATIME  = 2048  # Do not update directory access times
+MS_BIND        = 4096
+MS_MOVE        = 8192
+MS_REC         = 16384
+
+
 def unshare(flags: int) -> int:
     '''
     Run the unshare syscall with some flags.
@@ -41,6 +57,10 @@ def unshare(flags: int) -> int:
     If the return code is lower than 0, something went wrong.
     '''
     return libc.syscall(sys_unshare, flags)
+
+
+def mount(source, target, fs, options=''):
+    return libc.mount(source, target, fs, 0, options)
 
 
 if __name__ == '__main__':
