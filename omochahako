@@ -1,3 +1,5 @@
+#!/usr/share/env python3
+
 import ctypes
 
 sys_unshare = 272  # https://filippo.io/linux-syscall-table/
