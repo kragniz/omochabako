@@ -4,10 +4,9 @@ import ctypes
 import os
 import socket
 
-sys_unshare = 272  # https://filippo.io/linux-syscall-table/
-
 libc = ctypes.CDLL('libc.so.6', use_errno=True)
-libc.syscall.argtypes = [ctypes.c_int, ctypes.c_int]
+
+sys_unshare = 272  # https://filippo.io/linux-syscall-table/
 
 
 # pulled from linux/sched.h
@@ -63,6 +62,7 @@ def unshare(flags):
 
     If the return code is lower than 0, something went wrong.
     '''
+    libc.syscall.argtypes = [ctypes.c_int, ctypes.c_int]
     r = libc.syscall(sys_unshare, flags)
     if r < 0:
         errno = ctypes.get_errno()
@@ -70,8 +70,12 @@ def unshare(flags):
          format(os.strerror(errno)))
 
 
-def mount(source, target, fs, flags, options=''):
-    r = libc.mount(source, target, fs, flags, options)
+def mount(source, target, fs, flags, options=0):
+    r = libc.mount(source.encode('utf-8'),
+                   target.encode('utf-8'),
+                   fs.encode('utf-8'),
+                   flags,
+                   options)
     if r < 0:
         errno = ctypes.get_errno()
         raise RuntimeError("Error mounting {} ({}) on {} with options '{}': {}".
@@ -109,12 +113,10 @@ def setgroups_write(pid=None):
         f.write('deny')
 
 
-
 if __name__ == '__main__':
 
     user_id = os.geteuid()
     group_id = os.getegid()
-    pid = os.getpid()
 
     unshare(CLONE_NEWPID | CLONE_NEWNET |  CLONE_NEWNS |
             CLONE_NEWUTS | CLONE_NEWCGROUP | CLONE_NEWIPC |
@@ -123,5 +125,19 @@ if __name__ == '__main__':
     setgroups_write()
     map_user(0, user_id)
     map_group(0, group_id)
+
     socket.sethostname('omochahako')  # add a new hostname
-    os.system('bash')
+
+    # fork to enter the namespace
+    pid = os.fork()
+
+    if pid == 0:
+        # mount a /proc filesystem in this namespace. Without this, tools like
+        # ps and top will read from the global /proc and display the incorrect
+        # information about processes
+        mount('proc', '/proc', 'proc', MS_NOSUID|MS_NOEXEC|MS_NODEV)
+
+        os.execl('/bin/sh', '/bin/sh')
+    else:
+        # this is the parent, just wait for the child to exit
+        os.waitpid(pid, 0)
