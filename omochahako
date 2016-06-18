@@ -57,7 +57,7 @@ MS_UNBINDABLE  = (1<<17)  # change to unbindable
 MS_PRIVATE     = (1<<18)  # change to private
 
 
-def unshare(flags: int) -> int:
+def unshare(flags):
     '''
     Run the unshare syscall with some flags.
 
@@ -70,7 +70,7 @@ def unshare(flags: int) -> int:
          format(os.strerror(errno)))
 
 
-def mount(source: str, target: str, fs: str, flags: int, options='') -> int:
+def mount(source, target, fs, flags, options=''):
     r = libc.mount(source, target, fs, flags, options)
     if r < 0:
         errno = ctypes.get_errno()
