@@ -77,7 +77,11 @@ def mount(source, target, fs, flags, options=''):
         raise RuntimeError("Error mounting {} ({}) on {} with options '{}': {}".
          format(source, fs, target, options, os.strerror(errno)))
 
+
 def map_user(id_inside_ns, id_outside_ns, length=1, pid=None):
+    '''
+    Write a mapping from a user inside the user namespace and one outside.
+    '''
     if pid is None:
         pid = os.getpid()
 
@@ -85,17 +89,39 @@ def map_user(id_inside_ns, id_outside_ns, length=1, pid=None):
         f.write('{} {} {}'.format(id_inside_ns, id_outside_ns, length))
 
 
+def map_group(id_inside_ns, id_outside_ns, length=1, pid=None):
+    if pid is None:
+        pid = os.getpid()
+
+    with open('/proc/{}/gid_map'.format(pid), 'w') as f:
+        f.write('{} {} {}'.format(id_inside_ns, id_outside_ns, length))
+
+
+def setgroups_write(pid=None):
+    '''
+    In linux 3.19, a change was made to the gid_map file. You now need to write
+    'deny' to /proc/PID/setgroups in order to make changes in a namespace.
+    '''
+    if pid is None:
+        pid = os.getpid()
+
+    with open('/proc/{}/setgroups'.format(pid), 'w') as f:
+        f.write('deny')
+
+
+
 if __name__ == '__main__':
 
     user_id = os.geteuid()
     group_id = os.getegid()
     pid = os.getpid()
-    print(user_id, group_id, pid)
 
     unshare(CLONE_NEWPID | CLONE_NEWNET |  CLONE_NEWNS |
             CLONE_NEWUTS | CLONE_NEWCGROUP | CLONE_NEWIPC |
             CLONE_NEWUSER)
 
+    setgroups_write()
     map_user(0, user_id)
+    map_group(0, group_id)
     socket.sethostname('omochahako')  # add a new hostname
     os.system('bash')
