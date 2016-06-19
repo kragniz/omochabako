@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import ctypes
+import json
 import os
 import socket
 import urllib.request
+import uuid
 
 libc = ctypes.CDLL('libc.so.6', use_errno=True)
 
@@ -60,23 +62,34 @@ MS_PRIVATE     = (1<<18)  # change to private
 class DockerRegistry:
     def __init__(self):
         self.registry = 'https://registry-1.docker.io/v1'
-        token = self._get_token('ubuntu')
-        print(self.get_id('ubuntu', token))
+        self.pull('ubuntu')
+
+    def pull(self, name, tag='latest'):
+        token = self._get_token(name)
+        id = self.get_id(name, token, tag=tag)
+        layers = self.get_ancestry(id, token)
+
+        temp_uuid = uuid.uuid4()
 
     def get_id(self, name, token, tag='latest'):
-        with self._request(self.registry +
-                           '/repositories/{}/tags/{}'.format(name, tag),
-                           token) as f:
-            return f.read().decode('utf-8').strip('"')
+        r = self._get('/repositories/{}/tags/{}'.format(name, tag), token)
+        return r.strip('"')
 
-    def _request(self, url, token):
+    def get_ancestry(self, id, token):
+        return json.loads(self._get('/images/{}/ancestry'.format(id), token))
+
+    def _get(self, endpoint, token):
+        with self._request_auth(self.registry + endpoint, token) as f:
+            return f.read().decode('utf-8')
+
+    def _request_auth(self, url, token):
         req = urllib.request.Request(url)
         req.add_header('Authorization', 'Token {}'.format(token))
         return urllib.request.urlopen(req)
 
-    def _get_token(self, image_id):
+    def _get_token(self, name):
         url = ('https://index.docker.io'
-               '/v1/repositories/{}/images'.format(image_id))
+               '/v1/repositories/{}/images'.format(name))
         req = urllib.request.Request(url)
         req.add_header('X-Docker-Token', 'true')
         with urllib.request.urlopen(req) as response:
