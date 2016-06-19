@@ -3,6 +3,7 @@
 import ctypes
 import os
 import socket
+import urllib.request
 
 libc = ctypes.CDLL('libc.so.6', use_errno=True)
 
@@ -54,6 +55,35 @@ MS_SILENT      = 32768
 MS_POSIXACL    = (1<<16)  # VFS does not apply the umask
 MS_UNBINDABLE  = (1<<17)  # change to unbindable
 MS_PRIVATE     = (1<<18)  # change to private
+
+
+class DockerRegistry:
+    def __init__(self):
+        self.registry = 'https://registry-1.docker.io/v1'
+        token = self._get_token('ubuntu')
+        print(self.get_id('ubuntu', token))
+
+    def get_id(self, name, token, tag='latest'):
+        with self._request(self.registry +
+                           '/repositories/{}/tags/{}'.format(name, tag),
+                           token) as f:
+            return f.read().decode('utf-8').strip('"')
+
+    def _request(self, url, token):
+        req = urllib.request.Request(url)
+        req.add_header('Authorization', 'Token {}'.format(token))
+        return urllib.request.urlopen(req)
+
+    def _get_token(self, image_id):
+        url = ('https://index.docker.io'
+               '/v1/repositories/{}/images'.format(image_id))
+        req = urllib.request.Request(url)
+        req.add_header('X-Docker-Token', 'true')
+        with urllib.request.urlopen(req) as response:
+            headers = dict(response.info())
+            token = headers.get('X-Docker-Token')
+
+        return token
 
 
 def unshare(flags):
@@ -114,6 +144,8 @@ def setgroups_write(pid=None):
 
 
 if __name__ == '__main__':
+
+    registry = DockerRegistry()
 
     user_id = os.geteuid()
     group_id = os.getegid()
