@@ -78,12 +78,17 @@ class DockerRegistry:
 
         rootdir = self.container_rootdir_name(name)
         os.makedirs(rootdir)
+        print(rootdir)
 
-        for layer in layers:
+        for layer in reversed(layers):
             filename = self.layer_filename(layer)
+            print(filename)
             if not os.path.isfile(filename):
                 # we've already downloaded this layer
                 self.save_layer(layer, token)
+
+            print('extracting', layer)
+            self.untar_layer(layer, rootdir)
 
         return rootdir
 
@@ -107,9 +112,9 @@ class DockerRegistry:
                         break
                     f.write(chunk)
 
-    def untar_layer(id, root_dir):
-        tar = tarfile.open(self.layer_filename(id))
-        tar.extractall(root_dir)
+    def untar_layer(self, id, rootdir):
+        tar = tarfile.open(self.layer_filename(id), debug=2, errorlevel=0)
+        tar.extractall(rootdir)
 
     def get_id(self, name, token, tag='latest'):
         r = self._get('/repositories/{}/tags/{}'.format(name, tag), token)
