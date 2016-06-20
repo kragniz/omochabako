@@ -60,7 +60,6 @@ MS_UNBINDABLE  = (1<<17)  # change to unbindable
 MS_PRIVATE     = (1<<18)  # change to private
 
 omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochahako')
-print(omochahako_dir)
 
 
 def make_omochahako_dir():
@@ -78,11 +77,10 @@ class DockerRegistry:
 
         rootdir = self.container_rootdir_name(name)
         os.makedirs(rootdir)
-        print(rootdir)
+        print('building new root filesystem in', rootdir)
 
         for layer in reversed(layers):
             filename = self.layer_filename(layer)
-            print(filename)
             if not os.path.isfile(filename):
                 # we've already downloaded this layer
                 self.save_layer(layer, token)
@@ -113,7 +111,7 @@ class DockerRegistry:
                     f.write(chunk)
 
     def untar_layer(self, id, rootdir):
-        tar = tarfile.open(self.layer_filename(id), debug=2, errorlevel=0)
+        tar = tarfile.open(self.layer_filename(id), debug=0, errorlevel=0)
         tar.extractall(rootdir)
 
     def get_id(self, name, token, tag='latest'):
@@ -161,7 +159,7 @@ def unshare(flags):
 def mount(source, target, fs, flags, options=0):
     r = libc.mount(source.encode('utf-8'),
                    target.encode('utf-8'),
-                   fs.encode('utf-8'),
+                   fs.encode('utf-8') if fs else None,
                    flags,
                    options)
     if r < 0:
@@ -201,12 +199,23 @@ def setgroups_write(pid=None):
         f.write('deny')
 
 
+def set_mount_propagation():
+    '''
+    Set mount propagation to private recursively. Hopefully equivalent to
+
+        mount --make-rprivate /
+
+    This is needed to prevent mounts in this container leaking to the parent.
+    '''
+    mount('none', '/', None, MS_REC|MS_PRIVATE, None)
+
+
 if __name__ == '__main__':
     if not os.path.isdir(omochahako_dir):
         make_omochahako_dir()
 
     registry = DockerRegistry()
-    registry.pull('ubuntu')
+    #registry.pull('ubuntu')
 
     user_id = os.geteuid()
     group_id = os.getegid()
@@ -214,6 +223,8 @@ if __name__ == '__main__':
     unshare(CLONE_NEWPID | CLONE_NEWNET |  CLONE_NEWNS |
             CLONE_NEWUTS | CLONE_NEWCGROUP | CLONE_NEWIPC |
             CLONE_NEWUSER)
+
+    set_mount_propagation()
 
     setgroups_write()
     map_user(0, user_id)
