@@ -58,18 +58,47 @@ MS_POSIXACL    = (1<<16)  # VFS does not apply the umask
 MS_UNBINDABLE  = (1<<17)  # change to unbindable
 MS_PRIVATE     = (1<<18)  # change to private
 
+omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochahako')
+print(omochahako_dir)
+
+
+def make_omochahako_dir():
+    os.makedirs(os.path.join(omochahako_dir, 'layers'))
+
 
 class DockerRegistry:
     def __init__(self):
         self.registry = 'https://registry-1.docker.io/v1'
-        self.pull('ubuntu')
 
     def pull(self, name, tag='latest'):
+        # save tars in cache dir
+        # check if tar already pulled
+        # untar in sequence
         token = self._get_token(name)
         id = self.get_id(name, token, tag=tag)
         layers = self.get_ancestry(id, token)
+        print(layers)
+        for layer in layers:
+            filename = self.layer_filename(layer)
+            if not os.path.isfile(filename):
+                # we've already downloaded this layer
+                self.save_layer(layer, token)
 
-        temp_uuid = uuid.uuid4()
+    def layer_filename(self, id):
+        return os.path.join(omochahako_dir, 'layers', id + '.tar')
+
+    def save_layer(self, id, token):
+        filename = self.layer_filename(id)
+
+        endpoint = '/images/{}/layer'.format(id)
+        chunk_size = 16 * 1024
+        with self._request_auth(self.registry + endpoint, token) as response:
+            with open(filename, 'wb') as f:
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
 
     def get_id(self, name, token, tag='latest'):
         r = self._get('/repositories/{}/tags/{}'.format(name, tag), token)
@@ -157,8 +186,11 @@ def setgroups_write(pid=None):
 
 
 if __name__ == '__main__':
+    if not os.path.isdir(omochahako_dir):
+        make_omochahako_dir()
 
     registry = DockerRegistry()
+    registry.pull('ubuntu')
 
     user_id = os.geteuid()
     group_id = os.getegid()
