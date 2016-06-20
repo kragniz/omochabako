@@ -4,6 +4,7 @@ import ctypes
 import json
 import os
 import socket
+import tarfile
 import urllib.request
 import uuid
 
@@ -71,21 +72,27 @@ class DockerRegistry:
         self.registry = 'https://registry-1.docker.io/v1'
 
     def pull(self, name, tag='latest'):
-        # save tars in cache dir
-        # check if tar already pulled
-        # untar in sequence
         token = self._get_token(name)
         id = self.get_id(name, token, tag=tag)
         layers = self.get_ancestry(id, token)
-        print(layers)
+
+        rootdir = self.container_rootdir_name(name)
+        os.makedirs(rootdir)
+
         for layer in layers:
             filename = self.layer_filename(layer)
             if not os.path.isfile(filename):
                 # we've already downloaded this layer
                 self.save_layer(layer, token)
 
+        return rootdir
+
     def layer_filename(self, id):
         return os.path.join(omochahako_dir, 'layers', id + '.tar')
+
+    def container_rootdir_name(self, name):
+        dir_name = '{}-{}'.format(name, uuid.uuid4())
+        return os.path.join(omochahako_dir, 'containers', dir_name)
 
     def save_layer(self, id, token):
         filename = self.layer_filename(id)
@@ -99,6 +106,10 @@ class DockerRegistry:
                     if not chunk:
                         break
                     f.write(chunk)
+
+    def untar_layer(id, root_dir):
+        tar = tarfile.open(self.layer_filename(id))
+        tar.extractall(root_dir)
 
     def get_id(self, name, token, tag='latest'):
         r = self._get('/repositories/{}/tags/{}'.format(name, tag), token)
