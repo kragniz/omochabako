@@ -58,6 +58,13 @@ MS_SILENT      = 32768
 MS_POSIXACL    = (1<<16)  # VFS does not apply the umask
 MS_UNBINDABLE  = (1<<17)  # change to unbindable
 MS_PRIVATE     = (1<<18)  # change to private
+MS_STRICTATIME = (1<<24)  # Always perform atime updates
+
+MNT_FORCE       = 0x00000001  # Attempt to forcibily umount
+MNT_DETACH      = 0x00000002  # Just detach from the tree
+MNT_EXPIRE      = 0x00000004  # Mark for expiry
+UMOUNT_NOFOLLOW = 0x00000008  # Don't follow symlink on umount
+UMOUNT_UNUSED   = 0x80000000  # Flag guaranteed to be unused
 
 omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochahako')
 
@@ -75,7 +82,7 @@ class DockerRegistry:
         id = self.get_id(name, token, tag=tag)
         layers = self.get_ancestry(id, token)
 
-        rootdir = self.container_rootdir_name(name)
+        name, rootdir = self.container_rootdir_name(name)
         os.makedirs(rootdir)
         print('building new root filesystem in', rootdir)
 
@@ -88,14 +95,14 @@ class DockerRegistry:
             print('extracting', layer)
             self.untar_layer(layer, rootdir)
 
-        return rootdir
+        return name, rootdir
 
     def layer_filename(self, id):
         return os.path.join(omochahako_dir, 'layers', id + '.tar')
 
     def container_rootdir_name(self, name):
         dir_name = '{}-{}'.format(name, uuid.uuid4())
-        return os.path.join(omochahako_dir, 'containers', dir_name)
+        return dir_name, os.path.join(omochahako_dir, 'containers', dir_name)
 
     def save_layer(self, id, token):
         filename = self.layer_filename(id)
@@ -142,6 +149,10 @@ class DockerRegistry:
         return token
 
 
+def unset_environment():
+    os.environ.clear()
+
+
 def unshare(flags):
     '''
     Run the unshare syscall with some flags.
@@ -156,16 +167,24 @@ def unshare(flags):
          format(os.strerror(errno)))
 
 
-def mount(source, target, fs, flags, options=0):
+def mount(source, target, fs, flags, options=None):
     r = libc.mount(source.encode('utf-8'),
                    target.encode('utf-8'),
                    fs.encode('utf-8') if fs else None,
                    flags,
-                   options)
+                   options.encode('utf-8') if options else None)
     if r < 0:
         errno = ctypes.get_errno()
         raise RuntimeError("Error mounting {} ({}) on {} with options '{}': {}".
          format(source, fs, target, options, os.strerror(errno)))
+
+
+def umount(target):
+    r = libc.umount2(target.encode('utf-8'), MNT_DETACH)
+    if r < 0:
+        errno = ctypes.get_errno()
+        raise RuntimeError("Error umounting {}: {}".
+         format(target, os.strerror(errno)))
 
 
 def map_user(id_inside_ns, id_outside_ns, length=1, pid=None):
@@ -210,12 +229,25 @@ def set_mount_propagation():
     mount('none', '/', None, MS_REC|MS_PRIVATE, None)
 
 
+def pivot_root(new_root_dir):
+    mount(new_root_dir, new_root_dir, 'bind', MS_BIND|MS_REC)
+    old_root = os.path.join(new_root_dir, '.old_root')
+    os.makedirs(old_root)
+
+    libc.pivot_root(new_root_dir.encode('utf-8'), old_root.encode('utf-8'))
+    os.chdir('/')
+
+    old_root = os.path.join('/', '.old_root')
+    #umount(old_root)
+    #os.remove(old_root)
+
+
 if __name__ == '__main__':
     if not os.path.isdir(omochahako_dir):
         make_omochahako_dir()
 
     registry = DockerRegistry()
-    #registry.pull('ubuntu')
+    name, rootfs = registry.pull('ubuntu')
 
     user_id = os.geteuid()
     group_id = os.getegid()
@@ -230,7 +262,9 @@ if __name__ == '__main__':
     map_user(0, user_id)
     map_group(0, group_id)
 
-    socket.sethostname('omochahako')  # add a new hostname
+    socket.sethostname(name)  # add a new hostname
+
+    unset_environment()
 
     # fork to enter the namespace
     pid = os.fork()
@@ -240,6 +274,10 @@ if __name__ == '__main__':
         # ps and top will read from the global /proc and display the incorrect
         # information about processes
         mount('proc', '/proc', 'proc', MS_NOSUID|MS_NOEXEC|MS_NODEV)
+
+        mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
+
+        pivot_root(rootfs)
 
         os.execl('/bin/sh', '/bin/sh')
     else:
