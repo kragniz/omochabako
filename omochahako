@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import ctypes
 import json
 import os
@@ -241,13 +242,25 @@ def pivot_root(new_root_dir):
     #umount(old_root)
     #os.remove(old_root)
 
+def get_arguments():
+    parser = argparse.ArgumentParser(
+        description='Toy container runtime')
 
-if __name__ == '__main__':
-    if not os.path.isdir(omochahako_dir):
-        make_omochahako_dir()
+    parser.add_argument('-i', '--image', metavar='IMAGE',
+                        default='ubuntu:15.04',
+                        help='name of docker image to use')
 
+    parser.add_argument('command', metavar='COMMAND',
+                                help='command to run in the container')
+    parser.add_argument('args', metavar='ARG', nargs='*',
+                                help='arguments to be passed to command')
+
+    return parser.parse_args()
+
+
+def build_container(image, tag, command, args):
     registry = DockerRegistry()
-    name, rootfs = registry.pull('ubuntu')
+    name, rootfs = registry.pull(image, tag)
 
     user_id = os.geteuid()
     group_id = os.getegid()
@@ -279,7 +292,18 @@ if __name__ == '__main__':
 
         pivot_root(rootfs)
 
-        os.execl('/bin/sh', '/bin/sh')
+        os.execl(command, command)
     else:
         # this is the parent, just wait for the child to exit
         os.waitpid(pid, 0)
+
+
+if __name__ == '__main__':
+    args = get_arguments()
+
+    if not os.path.isdir(omochahako_dir):
+        make_omochahako_dir()
+
+    image, tag = args.image.split(':')
+
+    build_container(image, tag, args.command, args.args)
