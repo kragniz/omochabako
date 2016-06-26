@@ -277,7 +277,7 @@ def build_container(image, tag, command, args):
 
         pivot_root(rootfs)
 
-        os.execl(command, command)
+        os.execve(command, [command] + args, {})
     else:
         # this is the parent, just wait for the child to exit
         os.waitpid(pid, 0)
@@ -289,11 +289,12 @@ def get_arguments():
 
     parser.add_argument('-i', '--image', metavar='IMAGE',
                         default='ubuntu:15.04',
-                        help='name of docker image to use')
+                        help='name of docker image to use (defaults to '
+                             'ubuntu:15.04)')
 
     parser.add_argument('command', metavar='COMMAND',
                                 help='command to run in the container')
-    parser.add_argument('args', metavar='ARG', nargs='*',
+    parser.add_argument('args', metavar='ARG', nargs=argparse.REMAINDER,
                                 help='arguments to be passed to command')
 
     return parser.parse_args()
