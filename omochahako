@@ -70,7 +70,7 @@ MNT_EXPIRE      = 0x00000004  # Mark for expiry
 UMOUNT_NOFOLLOW = 0x00000008  # Don't follow symlink on umount
 UMOUNT_UNUSED   = 0x80000000  # Flag guaranteed to be unused
 
-omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochahako')
+omochahako_dir = '/var/lib/omochahako'
 
 
 class DockerRegistry:
