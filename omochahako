@@ -4,6 +4,7 @@ import argparse
 import ctypes
 import json
 import os
+import shutil
 import socket
 import tarfile
 import urllib.request
@@ -60,6 +61,8 @@ MS_POSIXACL    = (1<<16)  # VFS does not apply the umask
 MS_UNBINDABLE  = (1<<17)  # change to unbindable
 MS_PRIVATE     = (1<<18)  # change to private
 MS_STRICTATIME = (1<<24)  # Always perform atime updates
+
+MS_MGC_VAL = 0xC0ED0000  # Old magic mount flag
 
 MNT_FORCE       = 0x00000001  # Attempt to forcibily umount
 MNT_DETACH      = 0x00000002  # Just detach from the tree
@@ -239,11 +242,27 @@ def pivot_root(new_root_dir):
     os.chdir('/')
 
     old_root = os.path.join('/', '.old_root')
-    #umount(old_root)
-    #os.remove(old_root)
+    return old_root
 
 
-def build_container(image, tag, command, args):
+def setup_fs(rootfs):
+    old_root = pivot_root(rootfs)
+
+    # mount a /proc filesystem in this namespace. Without this, tools like
+    # ps and top will read from the global /proc and display the incorrect
+    # information about processes
+    mount('proc', '/proc', 'proc', MS_MGC_VAL)
+
+    mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
+
+    # unmount old root. This will unmount all other filesystems recursively.
+    # For some reason, I found this needed to be done after mounting /proc etc,
+    # otherwise permission errors happened.
+    umount(old_root)
+    shutil.rmtree(old_root)
+
+
+def start_container(image, tag, command, args):
     registry = DockerRegistry()
     name, rootfs = registry.pull(image, tag)
 
@@ -268,14 +287,7 @@ def build_container(image, tag, command, args):
     pid = os.fork()
 
     if pid == 0:
-        # mount a /proc filesystem in this namespace. Without this, tools like
-        # ps and top will read from the global /proc and display the incorrect
-        # information about processes
-        mount('proc', '/proc', 'proc', MS_NOSUID|MS_NOEXEC|MS_NODEV)
-
-        mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
-
-        pivot_root(rootfs)
+        setup_fs(rootfs)
 
         os.execve(command, [command] + args, {})
     else:
@@ -308,4 +320,4 @@ if __name__ == '__main__':
 
     image, tag = args.image.split(':')
 
-    build_container(image, tag, args.command, args.args)
+    start_container(image, tag, args.command, args.args)
