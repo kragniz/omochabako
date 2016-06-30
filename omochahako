@@ -82,27 +82,29 @@ class DockerRegistry:
         id = self.get_id(name, token, tag=tag)
         layers = self.get_ancestry(id, token)
 
-        name, rootdir = self.container_rootdir_name(name)
-        os.makedirs(rootdir)
-        print('building new root filesystem in', rootdir)
+        image_dir = self.image_dir_name(id)
 
-        for layer in reversed(layers):
-            filename = self.layer_filename(layer)
-            if not os.path.isfile(filename):
-                # we've already downloaded this layer
-                self.save_layer(layer, token)
+        # if we have not downloaded and extracted this image yet
+        if not os.path.isdir(image_dir) or not os.listdir(image_dir):
+            print('pulling {}:{} to {}'.format(name, tag, image_dir))
+            os.makedirs(image_dir)
 
-            print('extracting', layer)
-            self.untar_layer(layer, rootdir)
+            for layer in reversed(layers):
+                filename = self.layer_filename(layer)
+                if not os.path.isfile(filename):
+                    # we've already downloaded this layer
+                    self.save_layer(layer, token)
 
-        return name, rootdir
+                print('extracting', layer)
+                self.untar_layer(layer, image_dir)
+
+        return image_dir
 
     def layer_filename(self, id):
         return os.path.join(omochahako_dir, 'layers', id + '.tar')
 
-    def container_rootdir_name(self, name):
-        dir_name = '{}-{}'.format(name, uuid.uuid4())
-        return dir_name, os.path.join(omochahako_dir, 'containers', dir_name)
+    def image_dir_name(self, id):
+        return os.path.join(omochahako_dir, 'images', id)
 
     def save_layer(self, id, token):
         filename = self.layer_filename(id)
@@ -254,9 +256,54 @@ def setup_fs(rootfs):
     shutil.rmtree(old_root)
 
 
+def container_dir_name(name):
+    dir_name = '{}-{}'.format(name, uuid.uuid4())
+    return (dir_name,
+            os.path.join(omochahako_dir, 'containers', dir_name))
+
+
+def mount_image_overlay(image_dir, container_dir):
+    root = os.path.join(container_dir, 'root')
+    overlay = os.path.join(container_dir, 'overlay')
+    workdir = os.path.join(container_dir, 'overlay.work')
+
+    for dir in {root, overlay, workdir}:
+        os.makedirs(dir)
+
+    options = ('lowerdir={lowerdir},'
+               'upperdir={upperdir},'
+               'workdir={workdir}'.format(lowerdir=image_dir,
+                                          upperdir=overlay,
+                                          workdir=workdir))
+
+    # the one thing we seem to need root for :(
+    # if there's a way to do this without needing root, it would be really nice
+    mount('none', root, 'overlay', MS_MGC_VAL, options)
+    return root
+
+
 def start_container(image, tag, command, args):
     registry = DockerRegistry()
-    name, rootfs = registry.pull(image, tag)
+    image_dir = registry.pull(image, tag)
+
+    name, container_dir = container_dir_name(image)
+    print('building new root filesystem in', container_dir)
+
+    rootfs = os.path.join(container_dir, 'root')
+
+    overlay_mountpoint = mount_image_overlay(image_dir, container_dir)
+
+    # fork before unsharing, so we can unmount the overlay after the container
+    # is done
+    overlay_pid = os.fork()
+
+    # make sure we're the parent, then wait until the child is done
+    if overlay_pid != 0:
+        os.waitpid(overlay_pid, 0)
+
+        # clean up and un-overlay the filesystem
+        umount(overlay_mountpoint)
+        exit(0)
 
     user_id = os.geteuid()
     group_id = os.getegid()
@@ -289,7 +336,7 @@ def start_container(image, tag, command, args):
         os.waitpid(pid, 0)
 
 
-def make_omochahako_dirs():
+def make_omochahako_dir():
     os.makedirs(os.path.join(omochahako_dir, 'layers'))
 
 
