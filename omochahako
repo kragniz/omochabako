@@ -73,10 +73,6 @@ UMOUNT_UNUSED   = 0x80000000  # Flag guaranteed to be unused
 omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochahako')
 
 
-def make_omochahako_dir():
-    os.makedirs(os.path.join(omochahako_dir, 'layers'))
-
-
 class DockerRegistry:
     def __init__(self):
         self.registry = 'https://registry-1.docker.io/v1'
@@ -269,17 +265,21 @@ def start_container(image, tag, command, args):
             CLONE_NEWUTS | CLONE_NEWCGROUP | CLONE_NEWIPC |
             CLONE_NEWUSER)
 
+    # stop mounts leaking to host
     set_mount_propagation()
 
+    # allow us to modify groups in a namespace
     setgroups_write()
     map_user(0, user_id)
     map_group(0, group_id)
 
-    socket.sethostname(name)  # add a new hostname
+    # add a new hostname
+    socket.sethostname(name)
 
     # fork to enter the namespace
     pid = os.fork()
 
+    # check if we're in the child process or the parent
     if pid == 0:
         setup_fs(rootfs)
 
@@ -287,6 +287,10 @@ def start_container(image, tag, command, args):
     else:
         # this is the parent, just wait for the child to exit
         os.waitpid(pid, 0)
+
+
+def make_omochahako_dirs():
+    os.makedirs(os.path.join(omochahako_dir, 'layers'))
 
 
 def get_arguments():
