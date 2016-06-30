@@ -80,7 +80,6 @@ class DockerRegistry:
     def pull(self, name, tag='latest'):
         token = self._get_token(name)
         id = self.get_id(name, token, tag=tag)
-        layers = self.get_ancestry(id, token)
 
         image_dir = self.image_dir_name(id)
 
@@ -88,6 +87,8 @@ class DockerRegistry:
         if not os.path.isdir(image_dir) or not os.listdir(image_dir):
             print('pulling {}:{} to {}'.format(name, tag, image_dir))
             os.makedirs(image_dir)
+
+            layers = self.get_ancestry(id, token)
 
             for layer in reversed(layers):
                 filename = self.layer_filename(layer)
