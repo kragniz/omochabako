@@ -153,10 +153,6 @@ class DockerRegistry:
         return token
 
 
-def unset_environment():
-    os.environ.clear()
-
-
 def unshare(flags):
     '''
     Run the unshare syscall with some flags.
@@ -280,8 +276,6 @@ def start_container(image, tag, command, args):
     map_group(0, group_id)
 
     socket.sethostname(name)  # add a new hostname
-
-    unset_environment()
 
     # fork to enter the namespace
     pid = os.fork()
