@@ -70,7 +70,11 @@ MNT_EXPIRE      = 0x00000004  # Mark for expiry
 UMOUNT_NOFOLLOW = 0x00000008  # Don't follow symlink on umount
 UMOUNT_UNUSED   = 0x80000000  # Flag guaranteed to be unused
 
-omochahako_dir = '/var/lib/omochahako'
+if os.geteuid() == 0:
+    # we're running as root
+    omochahako_dir = '/var/lib/omochahako'
+else:
+    omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochahako')
 
 
 class DockerRegistry:
@@ -283,7 +287,7 @@ def mount_image_overlay(image_dir, container_dir):
     return root
 
 
-def start_container(image, tag, command, args):
+def start_container(image, tag, command, args, enable_overlay=False):
     registry = DockerRegistry()
     image_dir = registry.pull(image, tag)
 
@@ -292,19 +296,25 @@ def start_container(image, tag, command, args):
 
     rootfs = os.path.join(container_dir, 'root')
 
-    overlay_mountpoint = mount_image_overlay(image_dir, container_dir)
+    # use overlayfs to build root
+    if enable_overlay:
+        overlay_mountpoint = mount_image_overlay(image_dir, container_dir)
 
-    # fork before unsharing, so we can unmount the overlay after the container
-    # is done
-    overlay_pid = os.fork()
+        # fork before unsharing, so we can unmount the overlay after the container
+        # is done
+        overlay_pid = os.fork()
 
-    # make sure we're the parent, then wait until the child is done
-    if overlay_pid != 0:
-        os.waitpid(overlay_pid, 0)
+        # make sure we're the parent, then wait until the child is done
+        if overlay_pid != 0:
+            os.waitpid(overlay_pid, 0)
 
-        # clean up and un-overlay the filesystem
-        umount(overlay_mountpoint)
-        exit(0)
+            # clean up and un-overlay the filesystem
+            umount(overlay_mountpoint)
+            exit(0)
+    # otherwise do a naive copy operation on the entire base image
+    else:
+        print('copying {} to {}'.format(image_dir, rootfs))
+        shutil.copytree(image_dir, rootfs, symlinks=True)
 
     user_id = os.geteuid()
     group_id = os.getegid()
@@ -354,6 +364,12 @@ def get_arguments():
                                 help='command to run in the container')
     parser.add_argument('args', metavar='ARG', nargs=argparse.REMAINDER,
                                 help='arguments to be passed to command')
+    parser.add_argument('--overlay', dest='overlay', default=False,
+                                     action='store_true',
+                                     help='Use overlayfs to build root '
+                                          'filesystem (a lot more efficiant '
+                                          'since it only stores the delta, '
+                                          'but requires root privileges)')
 
     return parser.parse_args()
 
@@ -366,4 +382,5 @@ if __name__ == '__main__':
 
     image, tag = args.image.split(':')
 
-    start_container(image, tag, args.command, args.args)
+    start_container(image, tag, args.command, args.args,
+                    enable_overlay=args.overlay)
