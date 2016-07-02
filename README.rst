@@ -1,5 +1,5 @@
 ===================
-omochahako (toybox)
+omochabako (toybox)
 ===================
 
 Toy container runtime.
