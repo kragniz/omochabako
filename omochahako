@@ -262,6 +262,9 @@ def setup_fs(rootfs):
     mount('devpts', '/dev/pts', 'devpts', MS_NOEXEC|MS_NOSUID,
           'newinstance,ptmxmode=0666,mode=620') #,gid=5') # fix gid sometime
 
+    # mount kernel /sys interface
+    mount('sysfs', '/sys', 'sysfs', MS_RDONLY|MS_NOSUID|MS_NOEXEC|MS_NODEV)
+
     # unmount old root. This will unmount all other filesystems recursively.
     # For some reason, I found this needed to be done after mounting /proc etc,
     # otherwise permission errors happened.
