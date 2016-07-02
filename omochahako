@@ -252,6 +252,7 @@ def setup_fs(rootfs):
     # information about processes
     mount('proc', '/proc', 'proc', MS_MGC_VAL)
 
+    # pretty self-explanatory - mount a tmpfs on /dev
     mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
 
     # unmount old root. This will unmount all other filesystems recursively.
@@ -300,8 +301,9 @@ def start_container(image, tag, command, args, enable_overlay=False):
     if enable_overlay:
         overlay_mountpoint = mount_image_overlay(image_dir, container_dir)
 
-        # fork before unsharing, so we can unmount the overlay after the container
-        # is done
+        # fork before unsharing, so we can unmount the overlay after the
+        # container is done. Otherwise we don't have access to the host
+        # system's mounts.
         overlay_pid = os.fork()
 
         # make sure we're the parent, then wait until the child is done
