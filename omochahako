@@ -255,6 +255,13 @@ def setup_fs(rootfs):
     # pretty self-explanatory - mount a tmpfs on /dev
     mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
 
+    # mount pseudo-terminal interface
+    # I found this page to be useful:
+    #     http://free-electrons.com/kerneldoc/latest/filesystems/devpts.txt
+    os.makedirs('/dev/pts', 0o755)
+    mount('devpts', '/dev/pts', 'devpts', MS_NOEXEC|MS_NOSUID,
+          'newinstance,ptmxmode=0666,mode=620') #,gid=5') # fix gid sometime
+
     # unmount old root. This will unmount all other filesystems recursively.
     # For some reason, I found this needed to be done after mounting /proc etc,
     # otherwise permission errors happened.
