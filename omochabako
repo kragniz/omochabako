@@ -331,9 +331,15 @@ def start_container(image, tag, command, args, enable_overlay=False):
     user_id = os.geteuid()
     group_id = os.getegid()
 
-    unshare(CLONE_NEWPID | CLONE_NEWNET |  CLONE_NEWNS |
-            CLONE_NEWUTS | CLONE_NEWCGROUP | CLONE_NEWIPC |
-            CLONE_NEWUSER)
+    # unshare the following namespaces with the host system (these are all the
+    # available namespace)
+    unshare(CLONE_NEWPID      # pid namespace
+            | CLONE_NEWNET    # network namespace
+            | CLONE_NEWNS     # mount namespace (confusingly named)
+            | CLONE_NEWUTS    # hostname namespace (allows a different hostname)
+            | CLONE_NEWCGROUP # cgroup namespace
+            | CLONE_NEWIPC    # unix IPC namespace
+            | CLONE_NEWUSER)  # user namespace (allow user mappings)
 
     # stop mounts leaking to host
     set_mount_propagation()
