@@ -82,8 +82,8 @@ class DockerRegistry:
         self.registry = 'https://registry-1.docker.io/v1'
 
     def pull(self, name, tag='latest'):
-        token = self._get_token(name)
-        id = self.get_id(name, token, tag=tag)
+        self.token = self._get_token(name)
+        id = self.get_id(name, tag=tag)
 
         image_dir = self.image_dir_name(id)
 
@@ -92,13 +92,13 @@ class DockerRegistry:
             print('pulling {}:{} to {}'.format(name, tag, image_dir))
             os.makedirs(image_dir)
 
-            layers = self.get_ancestry(id, token)
+            layers = self.get_ancestry(id)
 
             for layer in reversed(layers):
                 filename = self.layer_filename(layer)
                 if not os.path.isfile(filename):
                     # we've already downloaded this layer
-                    self.save_layer(layer, token)
+                    self.save_layer(layer)
 
                 print('extracting', layer)
                 self.untar_layer(layer, image_dir)
@@ -111,12 +111,12 @@ class DockerRegistry:
     def image_dir_name(self, id):
         return os.path.join(omochahako_dir, 'images', id)
 
-    def save_layer(self, id, token):
+    def save_layer(self, id):
         filename = self.layer_filename(id)
 
         endpoint = '/images/{}/layer'.format(id)
         chunk_size = 16 * 1024
-        with self._request_auth(self.registry + endpoint, token) as response:
+        with self._request_auth(self.registry + endpoint) as response:
             with open(filename, 'wb') as f:
                 while True:
                     chunk = response.read(chunk_size)
@@ -128,20 +128,24 @@ class DockerRegistry:
         tar = tarfile.open(self.layer_filename(id), debug=0, errorlevel=0)
         tar.extractall(rootdir)
 
-    def get_id(self, name, token, tag='latest'):
-        r = self._get('/repositories/{}/tags/{}'.format(name, tag), token)
+    def get_id(self, name, tag='latest'):
+        r = self._get('/repositories/{}/tags/{}'.format(name, tag))
         return r.strip('"')
 
-    def get_ancestry(self, id, token):
-        return json.loads(self._get('/images/{}/ancestry'.format(id), token))
+    def get_ancestry(self, id):
+        return json.loads(self._get('/images/{}/ancestry'.format(id)))
 
-    def _get(self, endpoint, token):
-        with self._request_auth(self.registry + endpoint, token) as f:
+    def get_tags(self, name):
+        r = self._get('/repositories/{}/tags'.format(name))
+        return json.loads(r)
+
+    def _get(self, endpoint):
+        with self._request_auth(self.registry + endpoint) as f:
             return f.read().decode('utf-8')
 
-    def _request_auth(self, url, token):
+    def _request_auth(self, url):
         req = urllib.request.Request(url)
-        req.add_header('Authorization', 'Token {}'.format(token))
+        req.add_header('Authorization', 'Token {}'.format(self.token))
         return urllib.request.urlopen(req)
 
     def _get_token(self, name):
