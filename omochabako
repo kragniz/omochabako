@@ -77,6 +77,10 @@ else:
     omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochabako')
 
 
+class NotFoundError(Exception):
+    pass
+
+
 class DockerRegistry:
     def __init__(self):
         self.registry = 'https://registry-1.docker.io/v1'
@@ -302,9 +306,14 @@ def mount_image_overlay(image_dir, container_dir):
     return root
 
 
-def start_container(image, tag, command, args, enable_overlay=False):
-    registry = DockerRegistry()
-    image_dir = registry.pull(image, tag)
+def start_container(image, tag, command, args, registry, enable_overlay=False):
+    try:
+        image_dir = registry.pull(image, tag)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise NotFoundError
+        else:
+            raise
 
     name, container_dir = container_dir_name(image)
     print('building new root filesystem in', container_dir)
@@ -404,5 +413,14 @@ if __name__ == '__main__':
 
     image, tag = args.image.split(':')
 
-    start_container(image, tag, args.command, args.args,
-                    enable_overlay=args.overlay)
+    registry = DockerRegistry()
+
+    try:
+        start_container(image, tag, args.command, args.args, registry,
+                        enable_overlay=args.overlay)
+    except NotFoundError:
+        # can't find that tag or image
+        tags = registry.get_tags(image)
+        print('can\'t find tag "{}", maybe try one of these:'.format(tag))
+        for tag in tags:
+            print(tag)
