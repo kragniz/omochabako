@@ -398,7 +398,7 @@ def get_arguments():
     parser.add_argument('--overlay', dest='overlay', default=False,
                                      action='store_true',
                                      help='Use overlayfs to build root '
-                                          'filesystem (a lot more efficiant '
+                                          'filesystem (a lot more efficient '
                                           'since it only stores the delta, '
                                           'but requires root privileges)')
 
