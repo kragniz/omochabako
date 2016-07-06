@@ -261,6 +261,8 @@ def setup_fs(rootfs):
     mount('proc', '/proc', 'proc', MS_MGC_VAL)
 
     # pretty self-explanatory - mount a tmpfs on /dev
+    # it would be nice if this could be devtmpfs instead, but namespacing that
+    # seems to be not possible
     mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
 
     # mount pseudo-terminal interface
