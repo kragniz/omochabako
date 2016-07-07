@@ -252,7 +252,31 @@ def pivot_root(new_root_dir):
     return old_root
 
 
+def link_dev_nodes(rootfs):
+    print(rootfs)
+    devices = (
+        'dev/tty',
+        'dev/null',
+        'dev/zero',
+        'dev/random',
+        'dev/urandom',
+        'dev/full'
+    )
+
+    for device in devices:
+        host_device = os.path.join('/', device)
+        new_device = os.path.join(rootfs, device)
+        print(device, new_device)
+
+        if os.path.isfile(new_device):
+            os.remove(new_device)
+
+        os.symlink(device, new_device)
+
+
 def setup_fs(rootfs):
+    link_dev_nodes(rootfs)
+
     old_root = pivot_root(rootfs)
 
     # mount a /proc filesystem in this namespace. Without this, tools like
