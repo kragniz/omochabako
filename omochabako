@@ -266,12 +266,11 @@ def link_dev_nodes(rootfs):
     for device in devices:
         host_device = os.path.join('/', device)
         new_device = os.path.join(rootfs, device)
-        print(device, new_device)
 
         if os.path.isfile(new_device):
             os.remove(new_device)
 
-        os.symlink(device, new_device)
+        os.symlink(host_device, new_device)
 
 
 def setup_fs(rootfs):
