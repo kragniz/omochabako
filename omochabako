@@ -252,8 +252,9 @@ def pivot_root(new_root_dir):
     return old_root
 
 
-def link_dev_nodes(rootfs):
-    print(rootfs)
+def bind_dev_nodes(old_root):
+    '''Bind mount some devices from the host'''
+
     devices = (
         'dev/tty',
         'dev/null',
@@ -264,18 +265,18 @@ def link_dev_nodes(rootfs):
     )
 
     for device in devices:
-        host_device = os.path.join('/', device)
-        new_device = os.path.join(rootfs, device)
+        new_device = os.path.join('/', device)
+        host_device = os.path.join(old_root, device)
 
         if os.path.isfile(new_device):
             os.remove(new_device)
 
-        os.symlink(host_device, new_device)
+        open(new_device, 'a').close()
+
+        mount(host_device, new_device, 'bind', MS_BIND)
 
 
 def setup_fs(rootfs):
-    link_dev_nodes(rootfs)
-
     old_root = pivot_root(rootfs)
 
     # mount a /proc filesystem in this namespace. Without this, tools like
@@ -287,6 +288,9 @@ def setup_fs(rootfs):
     # it would be nice if this could be devtmpfs instead, but namespacing that
     # seems to be not possible
     mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
+
+    # populate /dev with some devices from the host
+    bind_dev_nodes(old_root)
 
     # mount pseudo-terminal interface
     # I found this page to be useful:
