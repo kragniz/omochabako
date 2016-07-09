@@ -273,6 +273,8 @@ def bind_dev_nodes(old_root):
 
         open(new_device, 'a').close()
 
+        # mount the device. Really, we'd want to mknod each of these, but
+        # that's a privileged operation
         mount(host_device, new_device, 'bind', MS_BIND)
 
 
@@ -298,6 +300,8 @@ def setup_fs(rootfs):
     os.makedirs('/dev/pts', 0o755)
     mount('devpts', '/dev/pts', 'devpts', MS_NOEXEC|MS_NOSUID,
           'newinstance,ptmxmode=0666,mode=620') #,gid=5') # fix gid sometime
+
+    os.symlink('/dev/pts/ptmx', '/dev/ptmx')
 
     # mount kernel /sys interface
     mount('sysfs', '/sys', 'sysfs', MS_RDONLY|MS_NOSUID|MS_NOEXEC|MS_NODEV)
