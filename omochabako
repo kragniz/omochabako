@@ -278,6 +278,17 @@ def bind_dev_nodes(old_root):
         mount(host_device, new_device, 'bind', MS_BIND)
 
 
+def symlink_many(mapping):
+    '''
+    Symlink a set of files.
+
+    Mapping is a dict containing a mapping between source:destination.
+    '''
+
+    for source, destination in mapping.items():
+        os.symlink(source, destination)
+
+
 def setup_fs(rootfs):
     old_root = pivot_root(rootfs)
 
@@ -301,7 +312,16 @@ def setup_fs(rootfs):
     mount('devpts', '/dev/pts', 'devpts', MS_NOEXEC|MS_NOSUID,
           'newinstance,ptmxmode=0666,mode=620') #,gid=5') # fix gid sometime
 
-    os.symlink('/dev/pts/ptmx', '/dev/ptmx')
+    symlink_many({
+        # do as as the devpts.txt documentation says
+        '/dev/pts/ptmx':   '/dev/ptmx',
+
+        # link to process stdin, stdout etc
+        '/proc/self/fd':   '/dev/fd',
+        '/proc/self/fd/0': '/dev/stdin',
+        '/proc/self/fd/1': '/dev/stdout',
+        '/proc/self/fd/2': '/dev/stderr',
+    })
 
     # mount kernel /sys interface
     mount('sysfs', '/sys', 'sysfs', MS_RDONLY|MS_NOSUID|MS_NOEXEC|MS_NODEV)
