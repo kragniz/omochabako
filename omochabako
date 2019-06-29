@@ -83,7 +83,7 @@ class NotFoundError(Exception):
 
 class DockerRegistry:
     def __init__(self):
-        self.registry = 'https://registry-1.docker.io/v1'
+        self.registry = 'https://registry-1.docker.io/v2'
 
     def pull(self, name, tag='latest'):
         self.token = self._get_token(name)
@@ -149,17 +149,15 @@ class DockerRegistry:
 
     def _request_auth(self, url):
         req = urllib.request.Request(url)
-        req.add_header('Authorization', 'Token {}'.format(self.token))
+        req.add_header('Authorization', 'Bearer {}'.format(self.token))
         return urllib.request.urlopen(req)
 
     def _get_token(self, name):
-        url = ('https://index.docker.io'
-               '/v1/repositories/{}/images'.format(name))
+        url = ('https://auth.docker.io/token')
         req = urllib.request.Request(url)
-        req.add_header('X-Docker-Token', 'true')
         with urllib.request.urlopen(req) as response:
-            headers = dict(response.info())
-            token = headers.get('X-Docker-Token')
+            body = json.loads(response.read().decode("utf-8"))
+            token = body.get("token")
 
         return token
 
