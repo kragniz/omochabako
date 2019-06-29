@@ -87,7 +87,10 @@ class DockerRegistry:
 
     def pull(self, name, tag='latest'):
         self.token = self._get_token(name)
-        id = self.get_id(name, tag=tag)
+        manifest = self.get_manifest(name, tag)
+        id = manifest.get("config").get("digest")
+        digests = [l.get("digest") for l in manifest.get("layers")]
+        print(digests)
 
         image_dir = self.image_dir_name(id)
 
@@ -115,10 +118,10 @@ class DockerRegistry:
     def image_dir_name(self, id):
         return os.path.join(omochahako_dir, 'images', id)
 
-    def save_layer(self, id):
+    def save_layer(self, name, digest):
         filename = self.layer_filename(id)
 
-        endpoint = '/images/{}/layer'.format(id)
+        endpoint = f'/{name}/blobs/{digest}'
         chunk_size = 16 * 1024
         with self._request_auth(self.registry + endpoint) as response:
             with open(filename, 'wb') as f:
@@ -134,7 +137,7 @@ class DockerRegistry:
 
     def get_manifest(self, name, reference='latest'):
         r = self._get('/{}/manifests/{}'.format(name, reference))
-        return r.strip('"')
+        return json.loads(r)
 
     def get_ancestry(self, id):
         return json.loads(self._get('/images/{}/ancestry'.format(id)))
