@@ -132,8 +132,8 @@ class DockerRegistry:
         tar = tarfile.open(self.layer_filename(id), debug=0, errorlevel=0)
         tar.extractall(rootdir)
 
-    def get_id(self, name, tag='latest'):
-        r = self._get('/repositories/{}/tags/{}'.format(name, tag))
+    def get_manifest(self, name, reference='latest'):
+        r = self._get('/{}/manifests/{}'.format(name, reference))
         return r.strip('"')
 
     def get_ancestry(self, id):
@@ -150,10 +150,13 @@ class DockerRegistry:
     def _request_auth(self, url):
         req = urllib.request.Request(url)
         req.add_header('Authorization', 'Bearer {}'.format(self.token))
+        req.add_header('Accept', 'application/vnd.docker.distribution.manifest.v2+json')
         return urllib.request.urlopen(req)
 
     def _get_token(self, name):
-        url = ('https://auth.docker.io/token')
+        url = ('https://auth.docker.io/token?'
+               'service=registry.docker.io&'
+               f'scope=repository:{name}:pull')
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req) as response:
             body = json.loads(response.read().decode("utf-8"))
