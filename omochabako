@@ -95,7 +95,7 @@ class DockerRegistry:
 
         # if we have not downloaded and extracted this image yet
         if not os.path.isdir(image_dir) or not os.listdir(image_dir):
-            print("pulling {}:{} to {}".format(name, tag, image_dir))
+            print(f"pulling {name}:{tag} to {image_dir}")
             os.makedirs(image_dir)
 
             for digest in reversed(digests):
@@ -133,7 +133,7 @@ class DockerRegistry:
         tar.extractall(rootdir)
 
     def get_manifest(self, name, reference="latest"):
-        r = self._get("/{}/manifests/{}".format(name, reference))
+        r = self._get(f"/{name}/manifests/{reference}")
         return json.loads(r)
 
     def _get(self, endpoint):
@@ -142,7 +142,7 @@ class DockerRegistry:
 
     def _request_auth(self, url):
         req = urllib.request.Request(url)
-        req.add_header("Authorization", "Bearer {}".format(self.token))
+        req.add_header("Authorization", f"Bearer {self.token}")
         req.add_header("Accept", "application/vnd.docker.distribution.manifest.v2+json")
         return urllib.request.urlopen(req)
 
@@ -170,7 +170,7 @@ def unshare(flags):
     r = libc.syscall(sys_unshare, flags)
     if r < 0:
         errno = ctypes.get_errno()
-        raise RuntimeError("Error running unshare: {}".format(os.strerror(errno)))
+        raise RuntimeError(f"Error running unshare: {os.strerror(errno)}")
 
 
 def mount(source, target, fs, flags, options=None):
@@ -184,9 +184,7 @@ def mount(source, target, fs, flags, options=None):
     if r < 0:
         errno = ctypes.get_errno()
         raise RuntimeError(
-            "Error mounting {} ({}) on {} with options '{}': {}".format(
-                source, fs, target, options, os.strerror(errno)
-            )
+            f"Error mounting {source} ({fs}) on {target} with options '{options}': {os.strerror(errno)}"
         )
 
 
@@ -194,7 +192,7 @@ def umount(target):
     r = libc.umount2(target.encode("utf-8"), MNT_DETACH)
     if r < 0:
         errno = ctypes.get_errno()
-        raise RuntimeError("Error umounting {}: {}".format(target, os.strerror(errno)))
+        raise RuntimeError(f"Error umounting {target}: {os.strerror(errno)}")
 
 
 def map_user(id_inside_ns, id_outside_ns, length=1, pid=None):
@@ -204,8 +202,8 @@ def map_user(id_inside_ns, id_outside_ns, length=1, pid=None):
     if pid is None:
         pid = os.getpid()
 
-    with open("/proc/{}/uid_map".format(pid), "w") as f:
-        f.write("{} {} {}".format(id_inside_ns, id_outside_ns, length))
+    with open(f"/proc/{pid}/uid_map", "w") as f:
+        f.write(f"{id_inside_ns} {id_outside_ns} {length}")
 
 
 def map_group(id_inside_ns, id_outside_ns, length=1, pid=None):
@@ -213,7 +211,7 @@ def map_group(id_inside_ns, id_outside_ns, length=1, pid=None):
         pid = os.getpid()
 
     with open("/proc/{}/gid_map".format(pid), "w") as f:
-        f.write("{} {} {}".format(id_inside_ns, id_outside_ns, length))
+        f.write(f"{id_inside_ns} {id_outside_ns} {length}")
 
 
 def setgroups_write(pid=None):
@@ -224,7 +222,7 @@ def setgroups_write(pid=None):
     if pid is None:
         pid = os.getpid()
 
-    with open("/proc/{}/setgroups".format(pid), "w") as f:
+    with open(f"/proc/{pid}/setgroups", "w") as f:
         f.write("deny")
 
 
@@ -339,7 +337,7 @@ def setup_fs(rootfs):
 
 
 def container_dir_name(name):
-    dir_name = "{}-{}".format(name, uuid.uuid4())
+    dir_name = f"{name.replace('/', '_')}-{uuid.uuid4()}"
     return (dir_name, os.path.join(omochahako_dir, "containers", dir_name))
 
 
@@ -351,13 +349,7 @@ def mount_image_overlay(image_dir, container_dir):
     for dir in {root, overlay, workdir}:
         os.makedirs(dir)
 
-    options = (
-        "lowerdir={lowerdir},"
-        "upperdir={upperdir},"
-        "workdir={workdir}".format(
-            lowerdir=image_dir, upperdir=overlay, workdir=workdir
-        )
-    )
+    options = f"lowerdir={image_dir},upperdir={overlay},workdir={workdir}"
 
     # the one thing we seem to need root for :(
     # if there's a way to do this without needing root, it would be really nice
@@ -397,7 +389,7 @@ def start_container(image, tag, command, args, registry, enable_overlay=False):
             exit(0)
     # otherwise do a naive copy operation on the entire base image
     else:
-        print("copying {} to {}".format(image_dir, rootfs))
+        print(f"copying {image_dir} to {rootfs}")
         shutil.copytree(image_dir, rootfs, symlinks=True)
 
     user_id = os.geteuid()
@@ -412,8 +404,8 @@ def start_container(image, tag, command, args, registry, enable_overlay=False):
         | CLONE_NEWUTS  # hostname namespace (allows a different hostname)
         | CLONE_NEWCGROUP  # cgroup namespace
         | CLONE_NEWIPC  # unix IPC namespace
-        | CLONE_NEWUSER
-    )  # user namespace (allow user mappings)
+        | CLONE_NEWUSER  # user namespace (allow user mappings)
+    )
 
     # stop mounts leaking to host
     set_mount_propagation()
@@ -492,4 +484,4 @@ if __name__ == "__main__":
             image, tag, args.command, args.args, registry, enable_overlay=args.overlay
         )
     except NotFoundError:
-        print('can\'t find tag "{}"'.format(tag))
+        print(f'can\'t find tag "{tag}"')
