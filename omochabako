@@ -10,7 +10,7 @@ import tarfile
 import urllib.request
 import uuid
 
-libc = ctypes.CDLL('libc.so.6', use_errno=True)
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
 
 sys_unshare = 272  # https://filippo.io/linux-syscall-table/
 
@@ -72,9 +72,9 @@ UMOUNT_UNUSED   = 0x80000000  # Flag guaranteed to be unused
 
 if os.geteuid() == 0:
     # we're running as root
-    omochahako_dir = '/var/lib/omochabako'
+    omochahako_dir = "/var/lib/omochabako"
 else:
-    omochahako_dir = os.path.join(os.path.expanduser('~'), '.omochabako')
+    omochahako_dir = os.path.join(os.path.expanduser("~"), ".omochabako")
 
 
 class NotFoundError(Exception):
@@ -83,9 +83,9 @@ class NotFoundError(Exception):
 
 class DockerRegistry:
     def __init__(self):
-        self.registry = 'https://registry-1.docker.io/v2'
+        self.registry = "https://registry-1.docker.io/v2"
 
-    def pull(self, name, tag='latest'):
+    def pull(self, name, tag="latest"):
         self.token = self._get_token(name)
         manifest = self.get_manifest(name, tag)
         id = manifest.get("config").get("digest")
@@ -95,7 +95,7 @@ class DockerRegistry:
 
         # if we have not downloaded and extracted this image yet
         if not os.path.isdir(image_dir) or not os.listdir(image_dir):
-            print('pulling {}:{} to {}'.format(name, tag, image_dir))
+            print("pulling {}:{} to {}".format(name, tag, image_dir))
             os.makedirs(image_dir)
 
             for digest in reversed(digests):
@@ -104,24 +104,24 @@ class DockerRegistry:
                     # we've already downloaded this layer
                     self.save_layer(name, digest)
 
-                print('extracting', digest)
+                print("extracting", digest)
                 self.untar_layer(digest, image_dir)
 
         return image_dir
 
     def layer_filename(self, digest):
-        return os.path.join(omochahako_dir, 'layers', digest + '.tar')
+        return os.path.join(omochahako_dir, "layers", digest + ".tar")
 
     def image_dir_name(self, id):
-        return os.path.join(omochahako_dir, 'images', id)
+        return os.path.join(omochahako_dir, "images", id)
 
     def save_layer(self, name, digest):
         filename = self.layer_filename(digest)
 
-        endpoint = f'/{name}/blobs/{digest}'
+        endpoint = f"/{name}/blobs/{digest}"
         chunk_size = 16 * 1024
         with self._request_auth(self.registry + endpoint) as response:
-            with open(filename, 'wb') as f:
+            with open(filename, "wb") as f:
                 while True:
                     chunk = response.read(chunk_size)
                     if not chunk:
@@ -132,24 +132,26 @@ class DockerRegistry:
         tar = tarfile.open(self.layer_filename(digest), debug=0, errorlevel=0)
         tar.extractall(rootdir)
 
-    def get_manifest(self, name, reference='latest'):
-        r = self._get('/{}/manifests/{}'.format(name, reference))
+    def get_manifest(self, name, reference="latest"):
+        r = self._get("/{}/manifests/{}".format(name, reference))
         return json.loads(r)
 
     def _get(self, endpoint):
         with self._request_auth(self.registry + endpoint) as f:
-            return f.read().decode('utf-8')
+            return f.read().decode("utf-8")
 
     def _request_auth(self, url):
         req = urllib.request.Request(url)
-        req.add_header('Authorization', 'Bearer {}'.format(self.token))
-        req.add_header('Accept', 'application/vnd.docker.distribution.manifest.v2+json')
+        req.add_header("Authorization", "Bearer {}".format(self.token))
+        req.add_header("Accept", "application/vnd.docker.distribution.manifest.v2+json")
         return urllib.request.urlopen(req)
 
     def _get_token(self, name):
-        url = ('https://auth.docker.io/token?'
-               'service=registry.docker.io&'
-               f'scope=repository:{name}:pull')
+        url = (
+            "https://auth.docker.io/token?"
+            "service=registry.docker.io&"
+            f"scope=repository:{name}:pull"
+        )
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req) as response:
             body = json.loads(response.read().decode("utf-8"))
@@ -159,125 +161,128 @@ class DockerRegistry:
 
 
 def unshare(flags):
-    '''
+    """
     Run the unshare syscall with some flags.
 
     If the return code is lower than 0, something went wrong.
-    '''
+    """
     libc.syscall.argtypes = [ctypes.c_int, ctypes.c_int]
     r = libc.syscall(sys_unshare, flags)
     if r < 0:
         errno = ctypes.get_errno()
-        raise RuntimeError("Error running unshare: {}".
-         format(os.strerror(errno)))
+        raise RuntimeError("Error running unshare: {}".format(os.strerror(errno)))
 
 
 def mount(source, target, fs, flags, options=None):
-    r = libc.mount(source.encode('utf-8'),
-                   target.encode('utf-8'),
-                   fs.encode('utf-8') if fs else None,
-                   flags,
-                   options.encode('utf-8') if options else None)
+    r = libc.mount(
+        source.encode("utf-8"),
+        target.encode("utf-8"),
+        fs.encode("utf-8") if fs else None,
+        flags,
+        options.encode("utf-8") if options else None,
+    )
     if r < 0:
         errno = ctypes.get_errno()
-        raise RuntimeError("Error mounting {} ({}) on {} with options '{}': {}".
-         format(source, fs, target, options, os.strerror(errno)))
+        raise RuntimeError(
+            "Error mounting {} ({}) on {} with options '{}': {}".format(
+                source, fs, target, options, os.strerror(errno)
+            )
+        )
 
 
 def umount(target):
-    r = libc.umount2(target.encode('utf-8'), MNT_DETACH)
+    r = libc.umount2(target.encode("utf-8"), MNT_DETACH)
     if r < 0:
         errno = ctypes.get_errno()
-        raise RuntimeError("Error umounting {}: {}".
-         format(target, os.strerror(errno)))
+        raise RuntimeError("Error umounting {}: {}".format(target, os.strerror(errno)))
 
 
 def map_user(id_inside_ns, id_outside_ns, length=1, pid=None):
-    '''
+    """
     Write a mapping from a user inside the user namespace and one outside.
-    '''
+    """
     if pid is None:
         pid = os.getpid()
 
-    with open('/proc/{}/uid_map'.format(pid), 'w') as f:
-        f.write('{} {} {}'.format(id_inside_ns, id_outside_ns, length))
+    with open("/proc/{}/uid_map".format(pid), "w") as f:
+        f.write("{} {} {}".format(id_inside_ns, id_outside_ns, length))
 
 
 def map_group(id_inside_ns, id_outside_ns, length=1, pid=None):
     if pid is None:
         pid = os.getpid()
 
-    with open('/proc/{}/gid_map'.format(pid), 'w') as f:
-        f.write('{} {} {}'.format(id_inside_ns, id_outside_ns, length))
+    with open("/proc/{}/gid_map".format(pid), "w") as f:
+        f.write("{} {} {}".format(id_inside_ns, id_outside_ns, length))
 
 
 def setgroups_write(pid=None):
-    '''
+    """
     In linux 3.19, a change was made to the gid_map file. You now need to write
     'deny' to /proc/PID/setgroups in order to make changes in a namespace.
-    '''
+    """
     if pid is None:
         pid = os.getpid()
 
-    with open('/proc/{}/setgroups'.format(pid), 'w') as f:
-        f.write('deny')
+    with open("/proc/{}/setgroups".format(pid), "w") as f:
+        f.write("deny")
 
 
 def set_mount_propagation():
-    '''
+    """
     Set mount propagation to private recursively. Hopefully equivalent to
 
         mount --make-rprivate /
 
     This is needed to prevent mounts in this container leaking to the parent.
-    '''
-    mount('none', '/', None, MS_REC|MS_PRIVATE, None)
+    """
+    mount("none", "/", None, MS_REC | MS_PRIVATE, None)
 
 
 def pivot_root(new_root_dir):
-    mount(new_root_dir, new_root_dir, 'bind', MS_BIND|MS_REC)
-    old_root = os.path.join(new_root_dir, '.old_root')
+    mount(new_root_dir, new_root_dir, "bind", MS_BIND | MS_REC)
+    old_root = os.path.join(new_root_dir, ".old_root")
     os.makedirs(old_root)
 
-    libc.pivot_root(new_root_dir.encode('utf-8'), old_root.encode('utf-8'))
-    os.chdir('/')
+    libc.pivot_root(new_root_dir.encode("utf-8"), old_root.encode("utf-8"))
+    os.chdir("/")
 
-    old_root = os.path.join('/', '.old_root')
+    old_root = os.path.join("/", ".old_root")
     return old_root
 
 
 def bind_dev_nodes(old_root):
-    '''Bind mount some devices from the host'''
+    """Bind mount some devices from the host"""
 
     devices = (
-        'dev/tty',
-        'dev/null',
-        'dev/zero',
-        'dev/random',
-        'dev/urandom',
-        'dev/full'
+        "dev/tty",
+        "dev/null",
+        "dev/zero",
+        "dev/random",
+        "dev/urandom",
+        "dev/full",
     )
 
     for device in devices:
-        new_device = os.path.join('/', device)
+        new_device = os.path.join("/", device)
         host_device = os.path.join(old_root, device)
 
         if os.path.isfile(new_device):
             os.remove(new_device)
 
-        open(new_device, 'a').close()
+        open(new_device, "a").close()
 
         # mount the device. Really, we'd want to mknod each of these, but
         # that's a privileged operation
-        mount(host_device, new_device, 'bind', MS_BIND)
+        mount(host_device, new_device, "bind", MS_BIND)
 
 
 def symlink_many(mapping):
-    '''
+    """
     Symlink a set of files.
 
     Mapping is a dict containing a mapping between source:destination.
-    '''
+    """
 
     for source, destination in mapping.items():
         os.symlink(source, destination)
@@ -289,12 +294,12 @@ def setup_fs(rootfs):
     # mount a /proc filesystem in this namespace. Without this, tools like
     # ps and top will read from the global /proc and display the incorrect
     # information about processes
-    mount('proc', '/proc', 'proc', MS_MGC_VAL)
+    mount("proc", "/proc", "proc", MS_MGC_VAL)
 
     # pretty self-explanatory - mount a tmpfs on /dev
     # it would be nice if this could be devtmpfs instead, but namespacing that
     # seems to be not possible
-    mount('tmpfs', '/dev', 'tmpfs', MS_NOSUID|MS_STRICTATIME, 'mode=755')
+    mount("tmpfs", "/dev", "tmpfs", MS_NOSUID | MS_STRICTATIME, "mode=755")
 
     # populate /dev with some devices from the host
     bind_dev_nodes(old_root)
@@ -302,23 +307,29 @@ def setup_fs(rootfs):
     # mount pseudo-terminal interface
     # I found this page to be useful:
     #     http://free-electrons.com/kerneldoc/latest/filesystems/devpts.txt
-    os.makedirs('/dev/pts', 0o755)
-    mount('devpts', '/dev/pts', 'devpts', MS_NOEXEC|MS_NOSUID,
-          'newinstance,ptmxmode=0666,mode=620') #,gid=5') # fix gid sometime
+    os.makedirs("/dev/pts", 0o755)
+    mount(
+        "devpts",
+        "/dev/pts",
+        "devpts",
+        MS_NOEXEC | MS_NOSUID,
+        "newinstance,ptmxmode=0666,mode=620",
+    )  # ,gid=5') # fix gid sometime
 
-    symlink_many({
-        # do as as the devpts.txt documentation says
-        '/dev/pts/ptmx':   '/dev/ptmx',
-
-        # link to process stdin, stdout etc
-        '/proc/self/fd':   '/dev/fd',
-        '/proc/self/fd/0': '/dev/stdin',
-        '/proc/self/fd/1': '/dev/stdout',
-        '/proc/self/fd/2': '/dev/stderr',
-    })
+    symlink_many(
+        {
+            # do as as the devpts.txt documentation says
+            "/dev/pts/ptmx": "/dev/ptmx",
+            # link to process stdin, stdout etc
+            "/proc/self/fd": "/dev/fd",
+            "/proc/self/fd/0": "/dev/stdin",
+            "/proc/self/fd/1": "/dev/stdout",
+            "/proc/self/fd/2": "/dev/stderr",
+        }
+    )
 
     # mount kernel /sys interface
-    mount('sysfs', '/sys', 'sysfs', MS_RDONLY|MS_NOSUID|MS_NOEXEC|MS_NODEV)
+    mount("sysfs", "/sys", "sysfs", MS_RDONLY | MS_NOSUID | MS_NOEXEC | MS_NODEV)
 
     # unmount old root. This will unmount all other filesystems recursively.
     # For some reason, I found this needed to be done after mounting /proc etc,
@@ -328,28 +339,29 @@ def setup_fs(rootfs):
 
 
 def container_dir_name(name):
-    dir_name = '{}-{}'.format(name, uuid.uuid4())
-    return (dir_name,
-            os.path.join(omochahako_dir, 'containers', dir_name))
+    dir_name = "{}-{}".format(name, uuid.uuid4())
+    return (dir_name, os.path.join(omochahako_dir, "containers", dir_name))
 
 
 def mount_image_overlay(image_dir, container_dir):
-    root = os.path.join(container_dir, 'root')
-    overlay = os.path.join(container_dir, 'overlay')
-    workdir = os.path.join(container_dir, 'overlay.work')
+    root = os.path.join(container_dir, "root")
+    overlay = os.path.join(container_dir, "overlay")
+    workdir = os.path.join(container_dir, "overlay.work")
 
     for dir in {root, overlay, workdir}:
         os.makedirs(dir)
 
-    options = ('lowerdir={lowerdir},'
-               'upperdir={upperdir},'
-               'workdir={workdir}'.format(lowerdir=image_dir,
-                                          upperdir=overlay,
-                                          workdir=workdir))
+    options = (
+        "lowerdir={lowerdir},"
+        "upperdir={upperdir},"
+        "workdir={workdir}".format(
+            lowerdir=image_dir, upperdir=overlay, workdir=workdir
+        )
+    )
 
     # the one thing we seem to need root for :(
     # if there's a way to do this without needing root, it would be really nice
-    mount('none', root, 'overlay', MS_MGC_VAL, options)
+    mount("none", root, "overlay", MS_MGC_VAL, options)
     return root
 
 
@@ -363,9 +375,9 @@ def start_container(image, tag, command, args, registry, enable_overlay=False):
             raise
 
     name, container_dir = container_dir_name(image)
-    print('building new root filesystem in', container_dir)
+    print("building new root filesystem in", container_dir)
 
-    rootfs = os.path.join(container_dir, 'root')
+    rootfs = os.path.join(container_dir, "root")
 
     # use overlayfs to build root
     if enable_overlay:
@@ -385,7 +397,7 @@ def start_container(image, tag, command, args, registry, enable_overlay=False):
             exit(0)
     # otherwise do a naive copy operation on the entire base image
     else:
-        print('copying {} to {}'.format(image_dir, rootfs))
+        print("copying {} to {}".format(image_dir, rootfs))
         shutil.copytree(image_dir, rootfs, symlinks=True)
 
     user_id = os.geteuid()
@@ -393,13 +405,15 @@ def start_container(image, tag, command, args, registry, enable_overlay=False):
 
     # unshare the following namespaces with the host system (these are all the
     # available namespace)
-    unshare(CLONE_NEWPID      # pid namespace
-            | CLONE_NEWNET    # network namespace
-            | CLONE_NEWNS     # mount namespace (confusingly named)
-            | CLONE_NEWUTS    # hostname namespace (allows a different hostname)
-            | CLONE_NEWCGROUP # cgroup namespace
-            | CLONE_NEWIPC    # unix IPC namespace
-            | CLONE_NEWUSER)  # user namespace (allow user mappings)
+    unshare(
+        CLONE_NEWPID  # pid namespace
+        | CLONE_NEWNET  # network namespace
+        | CLONE_NEWNS  # mount namespace (confusingly named)
+        | CLONE_NEWUTS  # hostname namespace (allows a different hostname)
+        | CLONE_NEWCGROUP  # cgroup namespace
+        | CLONE_NEWIPC  # unix IPC namespace
+        | CLONE_NEWUSER
+    )  # user namespace (allow user mappings)
 
     # stop mounts leaking to host
     set_mount_propagation()
@@ -426,44 +440,56 @@ def start_container(image, tag, command, args, registry, enable_overlay=False):
 
 
 def make_omochahako_dir():
-    os.makedirs(os.path.join(omochahako_dir, 'layers'))
+    os.makedirs(os.path.join(omochahako_dir, "layers"))
 
 
 def get_arguments():
-    parser = argparse.ArgumentParser(
-        description='Toy container runtime')
+    parser = argparse.ArgumentParser(description="Toy container runtime")
 
-    parser.add_argument('-i', '--image', metavar='IMAGE',
-                        default='ubuntu:15.04',
-                        help='name of docker image to use (defaults to '
-                             'ubuntu:15.04)')
+    parser.add_argument(
+        "-i",
+        "--image",
+        metavar="IMAGE",
+        default="ubuntu:15.04",
+        help="name of docker image to use (defaults to " "ubuntu:15.04)",
+    )
 
-    parser.add_argument('command', metavar='COMMAND',
-                                help='command to run in the container')
-    parser.add_argument('args', metavar='ARG', nargs=argparse.REMAINDER,
-                                help='arguments to be passed to command')
-    parser.add_argument('--overlay', dest='overlay', default=False,
-                                     action='store_true',
-                                     help='Use overlayfs to build root '
-                                          'filesystem (a lot more efficient '
-                                          'since it only stores the delta, '
-                                          'but requires root privileges)')
+    parser.add_argument(
+        "command", metavar="COMMAND", help="command to run in the container"
+    )
+    parser.add_argument(
+        "args",
+        metavar="ARG",
+        nargs=argparse.REMAINDER,
+        help="arguments to be passed to command",
+    )
+    parser.add_argument(
+        "--overlay",
+        dest="overlay",
+        default=False,
+        action="store_true",
+        help="Use overlayfs to build root "
+        "filesystem (a lot more efficient "
+        "since it only stores the delta, "
+        "but requires root privileges)",
+    )
 
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = get_arguments()
 
     if not os.path.isdir(omochahako_dir):
         make_omochahako_dir()
 
-    image, tag = args.image.split(':')
+    image, tag = args.image.split(":")
 
     registry = DockerRegistry()
 
     try:
-        start_container(image, tag, args.command, args.args, registry,
-                        enable_overlay=args.overlay)
+        start_container(
+            image, tag, args.command, args.args, registry, enable_overlay=args.overlay
+        )
     except NotFoundError:
         print('can\'t find tag "{}"'.format(tag))
