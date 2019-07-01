@@ -341,23 +341,7 @@ def container_dir_name(name):
     return (dir_name, os.path.join(omochahako_dir, "containers", dir_name))
 
 
-def mount_image_overlay(image_dir, container_dir):
-    root = os.path.join(container_dir, "root")
-    overlay = os.path.join(container_dir, "overlay")
-    workdir = os.path.join(container_dir, "overlay.work")
-
-    for dir in {root, overlay, workdir}:
-        os.makedirs(dir)
-
-    options = f"lowerdir={image_dir},upperdir={overlay},workdir={workdir}"
-
-    # the one thing we seem to need root for :(
-    # if there's a way to do this without needing root, it would be really nice
-    mount("none", root, "overlay", MS_MGC_VAL, options)
-    return root
-
-
-def start_container(image, tag, command, args, registry, enable_overlay=False):
+def start_container(image, tag, command, args, registry):
     try:
         image_dir = registry.pull(image, tag)
     except urllib.error.HTTPError as e:
@@ -371,26 +355,8 @@ def start_container(image, tag, command, args, registry, enable_overlay=False):
 
     rootfs = os.path.join(container_dir, "root")
 
-    # use overlayfs to build root
-    if enable_overlay:
-        overlay_mountpoint = mount_image_overlay(image_dir, container_dir)
-
-        # fork before unsharing, so we can unmount the overlay after the
-        # container is done. Otherwise we don't have access to the host
-        # system's mounts.
-        overlay_pid = os.fork()
-
-        # make sure we're the parent, then wait until the child is done
-        if overlay_pid != 0:
-            os.waitpid(overlay_pid, 0)
-
-            # clean up and un-overlay the filesystem
-            umount(overlay_mountpoint)
-            exit(0)
-    # otherwise do a naive copy operation on the entire base image
-    else:
-        print(f"copying {image_dir} to {rootfs}")
-        shutil.copytree(image_dir, rootfs, symlinks=True)
+    print(f"copying {image_dir} to {rootfs}")
+    shutil.copytree(image_dir, rootfs, symlinks=True)
 
     user_id = os.geteuid()
     group_id = os.getegid()
@@ -455,16 +421,6 @@ def get_arguments():
         nargs=argparse.REMAINDER,
         help="arguments to be passed to command",
     )
-    parser.add_argument(
-        "--overlay",
-        dest="overlay",
-        default=False,
-        action="store_true",
-        help="Use overlayfs to build root "
-        "filesystem (a lot more efficient "
-        "since it only stores the delta, "
-        "but requires root privileges)",
-    )
 
     return parser.parse_args()
 
@@ -481,7 +437,7 @@ if __name__ == "__main__":
 
     try:
         start_container(
-            image, tag, args.command, args.args, registry, enable_overlay=args.overlay
+            image, tag, args.command, args.args, registry
         )
     except NotFoundError:
         print(f'can\'t find tag "{tag}"')
