@@ -378,7 +378,11 @@ def start_container(image, tag, command, args, registry):
 
     # allow us to modify groups in a namespace
     setgroups_write()
+
+    # map current user to root
     map_user(0, user_id)
+
+    # map current group to group 0 (normally wheel)
     map_group(0, group_id)
 
     # add a new hostname
