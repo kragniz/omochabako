@@ -397,7 +397,11 @@ def start_container(image, tag, command, args, registry):
     if pid == 0:
         setup_fs(rootfs)
 
-        os.execve(command, [command] + args, {})
+        os.execve(command, [command] + args, {
+            "PATH": "/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/lib",
+            "LD_LIBRARY_PATH": "/usr/lib:/usr/local/lib",
+            "TERM": "xterm",
+            })
     else:
         # this is the parent, just wait for the child to exit
         os.waitpid(pid, 0)
